@@ -157,81 +157,50 @@ if (!found)
 
 }
 
-
 // TODO: 7. Implement ls function
 void ls(byte cwd, char* dir_name) {
   struct node_fs node_fs_buf;
   byte target = cwd;
   int i;
-
+  
   readSector(&(node_fs_buf.nodes[0]), FS_NODE_SECTOR_NUMBER);
   readSector(&(node_fs_buf.nodes[32]), FS_NODE_SECTOR_NUMBER + 1);
 
-  if (strlen(dir_name) > 0 && strcmp(dir_name, ".") == false) {
+  // Jika nama direktori diberikan dan bukan "."
+  if (strlen(dir_name) > 0 && !(strlen(dir_name) == 1 && dir_name[0] == '.')) {
     bool found = false;
+
+    // Cari node direktori dengan nama tersebut di bawah cwd
     for (i = 0; i < FS_MAX_NODE; i++) {
       if (node_fs_buf.nodes[i].parent_index == cwd &&
-          node_fs_buf.nodes[i].data_index == FS_NODE_D_DIR &&
           strcmp(node_fs_buf.nodes[i].node_name, dir_name)) {
-        target = i;
-        found = true;
-        break;
+        if (node_fs_buf.nodes[i].data_index == FS_NODE_D_DIR) {
+          target = i;
+          found = true;
+          break;
+        }
       }
     }
+
     if (!found) {
       printString("Directory not found\n");
       return;
     }
   }
-
+  
   for (i = 0; i < FS_MAX_NODE; i++) {
-    if (node_fs_buf.nodes[i].parent_index == target) {
+    if (node_fs_buf.nodes[i].parent_index == target &&
+        strlen(node_fs_buf.nodes[i].node_name) > 0) {
       printString(node_fs_buf.nodes[i].node_name);
       printString("\n");
     }
   }
 }
-
-
-// TODO: 7. Implement ls function
-void ls(byte cwd, char* dir_name) {
-  struct node_fs node_fs_buf;
-  byte target = cwd;
-  int i;
-
-  readSector(&(node_fs_buf.nodes[0]), FS_NODE_SECTOR_NUMBER);
-  readSector(&(node_fs_buf.nodes[32]), FS_NODE_SECTOR_NUMBER + 1);
-
-  if (strlen(dir_name) > 0 && strcmp(dir_name, ".") == false) {
-    bool found = false;
-    for (i = 0; i < FS_MAX_NODE; i++) {
-      if (node_fs_buf.nodes[i].parent_index == cwd &&
-          node_fs_buf.nodes[i].data_index == FS_NODE_D_DIR &&
-          strcmp(node_fs_buf.nodes[i].node_name, dir_name)) {
-        target = i;
-        found = true;
-        break;
-      }
-    }
-    if (!found) {
-      printString("Directory not found\n");
-      return;
-    }
-  }
-
-  for (i = 0; i < FS_MAX_NODE; i++) {
-    if (node_fs_buf.nodes[i].parent_index == target) {
-      printString(node_fs_buf.nodes[i].node_name);
-      printString("\n");
-    }
-  }
-}
-
 
 // TODO: 8. Implement mv function
 void mv(byte cwd, char* src, char* dst) {
     struct node_fs node_fs_buf;
-    int i; int src_node_idx = -1;
+    int i; int src_node_idx = -1; //set null
     byte target_parent_idx;
     char new_filename[MAX_FILENAME]; 
     
@@ -344,7 +313,6 @@ void mv(byte cwd, char* src, char* dst) {
     writeSector(&(node_fs_buf.nodes[0]), FS_NODE_SECTOR_NUMBER);
     writeSector(&(node_fs_buf.nodes[32]), FS_NODE_SECTOR_NUMBER + 1);
 }
-
 
 // TODO: 9. Implement cp function
 void cp(byte cwd, char* src, char* dst) {
