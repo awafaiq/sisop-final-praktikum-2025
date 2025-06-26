@@ -193,11 +193,297 @@ void ls(byte cwd, char* dir_name) {
 }
 
 
+// TODO: 7. Implement ls function
+void ls(byte cwd, char* dir_name) {
+  struct node_fs node_fs_buf;
+  byte target = cwd;
+  int i;
+
+  readSector(&(node_fs_buf.nodes[0]), FS_NODE_SECTOR_NUMBER);
+  readSector(&(node_fs_buf.nodes[32]), FS_NODE_SECTOR_NUMBER + 1);
+
+  if (strlen(dir_name) > 0 && strcmp(dir_name, ".") == false) {
+    bool found = false;
+    for (i = 0; i < FS_MAX_NODE; i++) {
+      if (node_fs_buf.nodes[i].parent_index == cwd &&
+          node_fs_buf.nodes[i].data_index == FS_NODE_D_DIR &&
+          strcmp(node_fs_buf.nodes[i].node_name, dir_name)) {
+        target = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      printString("Directory not found\n");
+      return;
+    }
+  }
+
+  for (i = 0; i < FS_MAX_NODE; i++) {
+    if (node_fs_buf.nodes[i].parent_index == target) {
+      printString(node_fs_buf.nodes[i].node_name);
+      printString("\n");
+    }
+  }
+}
+
+
 // TODO: 8. Implement mv function
-void mv(byte cwd, char* src, char* dst) {}
+void mv(byte cwd, char* src, char* dst) {
+    struct node_fs node_fs_buf;
+    int i; int src_node_idx = -1;
+    byte target_parent_idx;
+    char new_filename[MAX_FILENAME]; 
+    
+    // read
+    readSector(&(node_fs_buf.nodes[0]), FS_NODE_SECTOR_NUMBER);
+    readSector(&(node_fs_buf.nodes[32]), FS_NODE_SECTOR_NUMBER + 1);
+
+    // search src in cwd
+    for (i = 0; i < FS_MAX_NODE; i++){
+        if (node_fs_buf.nodes[i].parent_index == cwd && strcmp(node_fs_buf.nodes[i].node_name, src)){
+            src_node_idx = i;
+            break;
+        }
+    }
+
+    //if not to be found
+    if (src_node_idx == -1){
+        printString("File isn't found!\n");
+        return;
+    }
+
+    // check if src is file, not dir
+    if (node_fs_buf.nodes[src_node_idx].data_index == FS_NODE_D_DIR) {
+        printString("mv is only for file\n");
+        return;
+    }
+
+    // Case 1: mv <filename> ../<outputname>
+    if (strncmp(dst, "../", 3)){
+        if (cwd == FS_NODE_P_ROOT) {
+            printString("Cannot leave from root.\n");
+            return;
+        }
+        target_parent_idx = node_fs_buf.nodes[cwd].parent_index;
+        strcpy(new_filename, dst + 3); // copy its name after "../"
+    }
+
+    // Case 2: mv <filename> /<outputname>
+    else if (strncmp(dst, "/", 1)){
+        target_parent_idx = FS_NODE_P_ROOT;
+        strcpy(new_filename, dst + 1); // copy its name after "/"
+    }
+
+    // Case 3: mv <filename> <dirname>/<outputname>
+    else{
+        int slash_idx = -1;
+        int target_dir_node_idx = -1;
+        char target_dirname[MAX_FILENAME]; // variabel for saving filename target
+
+        // Loop for checking '/'
+        for(i = 0; i < strlen(dst); i++) {
+            if (dst[i] == '/') {
+                slash_idx = i;
+                break;
+            }
+        }
+        
+        if (slash_idx != -1) {
+            
+            // get target directory name
+            strncpy(target_dirname, dst, slash_idx);
+            target_dirname[slash_idx] = '\0';
+
+            // copy its name after "/"
+            strcpy(new_filename, dst + slash_idx + 1);
+
+            //check if target directory is exist
+            for (i = 0; i < FS_MAX_NODE; i++){
+                if (node_fs_buf.nodes[i].parent_index == cwd && 
+                    node_fs_buf.nodes[i].data_index == FS_NODE_D_DIR && 
+                    strcmp(node_fs_buf.nodes[i].node_name, target_dirname)) {
+                    target_dir_node_idx = i;
+                    break;
+                }
+            }
+
+            // if target directory isn't found
+            if (target_dir_node_idx == -1){
+                printString("Target directory isn't found.\n");
+                return;
+            }
+            target_parent_idx = target_dir_node_idx;
+
+        }
+        else{
+            printString("mv format isn't valid.\n");
+            return;
+        }
+    }
+    
+    // Checking if filename is empty
+    if (strlen(new_filename) == 0){
+        printString("Filename target must be fulfilled.\n");
+        return;
+    }
+
+    // Checking if filename is already exist
+    for (i = 0; i < FS_MAX_NODE; i++){
+        if (node_fs_buf.nodes[i].parent_index == target_parent_idx && strcmp(node_fs_buf.nodes[i].node_name, new_filename)) {
+            printString("Filename is on target.\n");
+            return;
+        }
+    }
+
+    // change parent_index and node_name
+    node_fs_buf.nodes[src_node_idx].parent_index = target_parent_idx;
+    strcpy(node_fs_buf.nodes[src_node_idx].node_name, new_filename);
+
+    // Rewrite 
+    writeSector(&(node_fs_buf.nodes[0]), FS_NODE_SECTOR_NUMBER);
+    writeSector(&(node_fs_buf.nodes[32]), FS_NODE_SECTOR_NUMBER + 1);
+}
+
 
 // TODO: 9. Implement cp function
-void cp(byte cwd, char* src, char* dst) {}
+void cp(byte cwd, char* src, char* dst) {
+    struct node_fs node_fs_buf;
+    int i;
+    int src_node_idx = -1;
+    byte target_parent_idx;
+    char new_filename[MAX_FILENAME];
+
+    // 1. read node sectors
+    readSector(&(node_fs_buf.nodes[0]), FS_NODE_SECTOR_NUMBER);
+    readSector(&(node_fs_buf.nodes[32]), FS_NODE_SECTOR_NUMBER + 1);
+
+    // 2. search src in cwd
+    for (i = 0; i < FS_MAX_NODE; i++) {
+        if (node_fs_buf.nodes[i].parent_index == cwd && strcmp(node_fs_buf.nodes[i].node_name, src)){
+            src_node_idx = i;
+            break;
+        }
+    }
+
+    if (src_node_idx == -1) {
+        printString("File isn't found!\n");
+        return;
+    }
+
+    // 3. check if src is file, not dir
+    if (node_fs_buf.nodes[src_node_idx].data_index == FS_NODE_D_DIR){
+        printString("cp is only for file!\n");
+        return;
+    }
+
+    // copy from mv
+    if (strncmp(dst, "../", 3)){
+        if (cwd == FS_NODE_P_ROOT){
+          printString("Cannot leave from root.\n");
+          return;
+        }
+        target_parent_idx = node_fs_buf.nodes[cwd].parent_index;
+        strcpy(new_filename, dst + 3);
+    }
+    else if (strncmp(dst, "/", 1)){
+        target_parent_idx = FS_NODE_P_ROOT;
+        strcpy(new_filename, dst + 1);
+    }
+    else {
+        int slash_idx = -1, target_dir_node_idx = -1;
+        char target_dirname[MAX_FILENAME];
+        for(i = 0; i < strlen(dst); i++){
+          if (dst[i] == '/'){
+            slash_idx = i;
+            break;
+          }
+        }
+        
+        if (slash_idx != -1){
+            strncpy(target_dirname, dst, slash_idx);
+            target_dirname[slash_idx] = '\0';
+            strcpy(new_filename, dst + slash_idx + 1);
+            for (i = 0; i < FS_MAX_NODE; i++){
+                if (node_fs_buf.nodes[i].parent_index == cwd && node_fs_buf.nodes[i].data_index == FS_NODE_D_DIR && strcmp(node_fs_buf.nodes[i].node_name, target_dirname)){
+                    target_dir_node_idx = i;
+                    break;
+                }
+            }
+            if (target_dir_node_idx == -1){
+              printString("Target directory isn't found.\n");
+              return;
+            }
+            target_parent_idx = target_dir_node_idx;
+        }
+        else {
+          printString("cp format isn't valid.\n");
+          return;
+        }
+    }
+
+    if (strlen(new_filename) == 0) { printString("Filename target must be fulfilled.\n"); return; }
+
+    // 5. Find empty resources (node and data sector)
+    int empty_node_idx = -1;
+    int empty_sector_idx = -1;
+    bool sector_is_used[256]; // Menggunakan array lokal, bukan dari disk
+
+    // Initialize all sectors as free
+    for (i = 0; i < 256; i++) {
+        sector_is_used[i] = false;
+    }
+
+    // Mark system sectors as used
+    sector_is_used[FS_NODE_SECTOR_NUMBER] = true;
+    sector_is_used[FS_NODE_SECTOR_NUMBER + 1] = true;
+
+    // Mark used data sectors by checking all file nodes
+    for (i = 0; i < FS_MAX_NODE; i++) {
+        if (node_fs_buf.nodes[i].node_name[0] != '\0' && node_fs_buf.nodes[i].data_index != FS_NODE_D_DIR) {
+            sector_is_used[node_fs_buf.nodes[i].data_index] = true;
+        }
+        // find an empty node
+        if (node_fs_buf.nodes[i].node_name[0] == '\0' && empty_node_idx == -1) {
+            empty_node_idx = i;
+        }
+    }
+
+    // Find the first free sector
+    for (i = 0; i < 256; i++) {
+        if (sector_is_used[i] == false) {
+            empty_sector_idx = i;
+            break;
+        }
+    }
+
+    if (empty_node_idx == -1 || empty_sector_idx == -1){
+        printString("Not enough space on disk or filesystem.\n");
+        return;
+    }
+
+    // Check if filename already on target
+    for (i = 0; i < FS_MAX_NODE; i++){
+        if (node_fs_buf.nodes[i].parent_index == target_parent_idx && strcmp(node_fs_buf.nodes[i].node_name, new_filename)){
+            printString("Filename is on target.\n");
+            return;
+        }
+    }
+
+    // copy content
+    char content_buf[SECTOR_SIZE];
+    readSector(content_buf, node_fs_buf.nodes[src_node_idx].data_index);
+    writeSector(content_buf, empty_sector_idx);
+
+    // update node
+    node_fs_buf.nodes[empty_node_idx].parent_index = target_parent_idx;
+    strcpy(node_fs_buf.nodes[empty_node_idx].node_name, new_filename);
+    node_fs_buf.nodes[empty_node_idx].data_index = empty_sector_idx;
+
+    // Rewrite
+    writeSector(&(node_fs_buf.nodes[0]), FS_NODE_SECTOR_NUMBER);
+    writeSector(&(node_fs_buf.nodes[32]), FS_NODE_SECTOR_NUMBER + 1);
+}
 
 // TODO: 10. Implement cat function
 void cat(byte cwd, char* filename) {}
